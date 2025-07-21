@@ -13,12 +13,10 @@ public class LevelEditor : Editor
     
     public override void OnInspectorGUI()
     {
-        // Draw default inspector
         DrawDefaultInspector();
         
         EditorGUILayout.Space(10);
         
-        // Generation buttons
         EditorGUILayout.LabelField("Generating Controls", EditorStyles.boldLabel);
         
         EditorGUILayout.BeginHorizontal();
@@ -39,7 +37,6 @@ public class LevelEditor : Editor
         
         EditorGUILayout.Space(5);
         
-        // Quick generation buttons with different settings
         EditorGUILayout.LabelField("Options", EditorStyles.boldLabel);
         
         EditorGUILayout.BeginHorizontal();
@@ -75,7 +72,6 @@ public class LevelEditor : Editor
         
         EditorGUILayout.Space(10);
         
-        // Information display
         if (Application.isPlaying || generator.dungeonParent != null)
         {
             EditorGUILayout.LabelField("Level Info", EditorStyles.boldLabel);
@@ -87,7 +83,6 @@ public class LevelEditor : Editor
             }
         }
         
-        // Mark object as dirty if any changes were made
         if (GUI.changed)
         {
             EditorUtility.SetDirty(generator);
@@ -98,7 +93,6 @@ public class LevelEditor : Editor
     {
         if (generator.dungeonParent != null)
         {
-            // Clear in editor mode
             while (generator.dungeonParent.childCount > 0)
             {
                 DestroyImmediate(generator.dungeonParent.GetChild(0).gameObject);

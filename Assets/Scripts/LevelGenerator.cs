@@ -36,13 +36,13 @@ public class LevelGenerator : MonoBehaviour
     public bool showDebugInfo = true;
     public bool showRoomNumbers = false;
     
-    // Internal data
+    // internal data
     private int[,] lvlGrid;
     private List<Room> rooms;
     private List<Corridor> corridors;
     private Room startRoom;
     
-    // Grid cell types
+    // grid cell types
     const int EMPTY = 0;
     const int FLOOR = 1;
     const int WALL = 2;
@@ -72,7 +72,7 @@ public class LevelGenerator : MonoBehaviour
             
             if (!success)
             {
-                // Try with a different seed
+                // tried with a diff seed here
                 if (useRandomSeed)
                     seed = Random.Range(0, 10000);
                 else
@@ -110,17 +110,16 @@ public class LevelGenerator : MonoBehaviour
     
     private bool TryGenerateLevel()
     {
-        // Ensure collections are initialized
         if (rooms == null) rooms = new List<Room>();
         if (corridors == null) corridors = new List<Corridor>();
         
-        // Step 1: Generate rooms
+        // generating rooms
         if (!GenerateRooms()) return false;
         
-        // Step 2: Connect rooms with corridors
+        //connect rooms with corridors
         ConnectRooms();
         
-        // Step 3: Apply organic generation if enabled
+        //applying organic generation (if enabled)
         if (useOrganicGeneration)
         {
             ApplyPerlinNoise();
@@ -128,10 +127,10 @@ public class LevelGenerator : MonoBehaviour
             BlendOrganicWithStructured();
         }
         
-        // Step 4: Fill the grid
+        //filling the grid
         FillGrid();
         
-        // Step 5: Generate walls
+        //generating walls
         GenerateWalls();
         
         return true;
@@ -151,13 +150,12 @@ public class LevelGenerator : MonoBehaviour
         {
             for (int y = 0; y < lvlHeight; y++)
             {
-                // Calculate Perlin noise value
+                //calculating perlin noise value here
                 float noiseValue = Mathf.PerlinNoise(
                     offsetX + x * noiseScale, 
                     offsetY + y * noiseScale
                 );
                 
-                // If noise value is above threshold, mark as potential floor
                 if (noiseValue > noiseThreshold)
                 {
                     lvlGrid[x, y] = FLOOR;
@@ -168,7 +166,7 @@ public class LevelGenerator : MonoBehaviour
     
     private void RandomWalk()
     {
-        // Start walker in a random position
+        // walk in rand pos
         Vector2Int walkerPos = new Vector2Int(
             Random.Range(1, lvlWidth - 1),
             Random.Range(1, lvlHeight - 1)
@@ -176,21 +174,17 @@ public class LevelGenerator : MonoBehaviour
         
         for (int i = 0; i < randomWalkSteps; i++)
         {
-            // Mark current position as floor
             lvlGrid[walkerPos.x, walkerPos.y] = FLOOR;
             
-            // Randomly decide to change direction
             if (Random.value < randomWalkTurnChance)
             {
                 walkerPos = GetNextRandomPosition(walkerPos);
             }
             else
             {
-                // Continue in same direction
                 walkerPos += GetDirectionVector(walkerPos);
             }
             
-            // Clamp position to stay within bounds
             walkerPos.x = Mathf.Clamp(walkerPos.x, 1, lvlWidth - 2);
             walkerPos.y = Mathf.Clamp(walkerPos.y, 1, lvlHeight - 2);
         }
@@ -198,15 +192,14 @@ public class LevelGenerator : MonoBehaviour
     
     private Vector2Int GetNextRandomPosition(Vector2Int currentPos)
     {
-        // Get all valid neighboring positions
         List<Vector2Int> possibleDirections = new List<Vector2Int>();
         
         for (int dx = -1; dx <= 1; dx++)
         {
             for (int dy = -1; dy <= 1; dy++)
             {
-                if (dx == 0 && dy == 0) continue; // Skip current position
-                if (Mathf.Abs(dx) + Mathf.Abs(dy) > 1) continue; // Skip diagonals
+                if (dx == 0 && dy == 0) continue; // skip curr pos
+                if (Mathf.Abs(dx) + Mathf.Abs(dy) > 1) continue; // skip diags
                 
                 int newX = currentPos.x + dx;
                 int newY = currentPos.y + dy;
@@ -221,13 +214,11 @@ public class LevelGenerator : MonoBehaviour
         if (possibleDirections.Count == 0)
             return currentPos;
             
-        // Return current position plus a random direction
         return currentPos + possibleDirections[Random.Range(0, possibleDirections.Count)];
     }
     
     private Vector2Int GetDirectionVector(Vector2Int pos)
     {
-        // This could be enhanced to remember the last direction for smoother paths
         return GetNextRandomPosition(pos) - pos;
     }
     
@@ -235,7 +226,6 @@ public class LevelGenerator : MonoBehaviour
 {
     for (int i = 0; i < organicBlendIterations; i++)
     {
-        // Expand rooms into nearby organic areas
         foreach (Room room in rooms)
         {
             RectInt bounds = room.GetExpandedBounds(1);
@@ -247,13 +237,11 @@ public class LevelGenerator : MonoBehaviour
                 {
                     if (IsValidPosition(x, y) && lvlGrid[x, y] == FLOOR)
                     {
-                        // Collect tiles to add to the room
                         newRoomTiles.Add(new Vector2Int(x, y));
                     }
                 }
             }
             
-            // Expand the room to include new tiles
             foreach (Vector2Int tile in newRoomTiles)
             {
                 room.size = new Vector2Int(
@@ -263,10 +251,8 @@ public class LevelGenerator : MonoBehaviour
             }
         }
         
-        // Connect organic areas to corridors
         foreach (Corridor corridor in corridors)
         {
-            // Create a copy of the original path to iterate over
             List<Vector2Int> originalPath = new List<Vector2Int>(corridor.path);
             List<Vector2Int> newPathTiles = new List<Vector2Int>();
             
@@ -291,7 +277,6 @@ public class LevelGenerator : MonoBehaviour
                 }
             }
             
-            // Add all new tiles to the corridor path
             corridor.path.AddRange(newPathTiles);
         }
     }
@@ -306,7 +291,6 @@ public class LevelGenerator : MonoBehaviour
         {
             attempts++;
             
-            // Generate random room size and position
             Vector2Int roomSize = new Vector2Int(
                 Random.Range(minRoomSize.x, maxRoomSize.x + 1),
                 Random.Range(minRoomSize.y, maxRoomSize.y + 1)
@@ -319,7 +303,6 @@ public class LevelGenerator : MonoBehaviour
             
             Room newRoom = new Room(roomPosition, roomSize);
             
-            // Check if room overlaps with existing rooms
             bool overlaps = false;
             foreach (Room existingRoom in rooms)
             {
@@ -341,7 +324,6 @@ public class LevelGenerator : MonoBehaviour
             return false;
         }
         
-        // Designate the first room as start room
         if (rooms.Count > 0)
         {
             startRoom = rooms[0];
@@ -355,7 +337,6 @@ public class LevelGenerator : MonoBehaviour
     {
         if (rooms.Count < 2) return;
         
-        // Create minimum spanning tree to connect all rooms
         List<Room> connectedRooms = new List<Room> { rooms[0] };
         List<Room> unconnectedRooms = new List<Room>(rooms.Skip(1));
         
@@ -365,7 +346,6 @@ public class LevelGenerator : MonoBehaviour
             Room closestUnconnected = null;
             float closestDistance = float.MaxValue;
             
-            // Find the closest pair between connected and unconnected rooms
             foreach (Room connected in connectedRooms)
             {
                 foreach (Room unconnected in unconnectedRooms)
@@ -380,7 +360,6 @@ public class LevelGenerator : MonoBehaviour
                 }
             }
             
-            // Create corridor between closest rooms
             if (closestConnected != null && closestUnconnected != null)
             {
                 corridors.Add(new Corridor(closestConnected, closestUnconnected));
@@ -389,14 +368,12 @@ public class LevelGenerator : MonoBehaviour
             }
         }
         
-        // Add some extra connections for variety (20% chance per room pair)
         for (int i = 0; i < rooms.Count; i++)
         {
             for (int j = i + 1; j < rooms.Count; j++)
             {
                 if (Random.Range(0f, 1f) < 0.2f)
                 {
-                    // Check if these rooms are already connected
                     bool alreadyConnected = false;
                     foreach (Corridor corridor in corridors)
                     {
@@ -419,13 +396,11 @@ public class LevelGenerator : MonoBehaviour
     
     private void FillGrid()
     {
-        // Clear grid
         if (lvlGrid == null)
         {
             lvlGrid = new int[lvlWidth, lvlHeight];
         }
         
-        // Clear grid (but preserve organic generation if enabled)
         if (!useOrganicGeneration)
         {
             for (int x = 0; x < lvlWidth; x++)
@@ -437,7 +412,6 @@ public class LevelGenerator : MonoBehaviour
             }
         }
         
-        // Fill rooms
         if (rooms != null)
         {
             foreach (Room room in rooms)
@@ -459,7 +433,6 @@ public class LevelGenerator : MonoBehaviour
             }
         }
         
-        // Fill corridors
         if (corridors != null)
         {
             foreach (Corridor corridor in corridors)
@@ -489,7 +462,6 @@ public class LevelGenerator : MonoBehaviour
             {
                 if (lvlGrid[x, y] == FLOOR || lvlGrid[x, y] == CORRIDOR)
                 {
-                    // Check 8 neighbors (including diagonals)
                     for (int dx = -1; dx <= 1; dx++)
                     {
                         for (int dy = -1; dy <= 1; dy++)
@@ -507,14 +479,6 @@ public class LevelGenerator : MonoBehaviour
             }
         }
     }
-
-
-    // private bool IsFloorOrCorridor(int x, int y)
-    // {
-    //     if (!IsValidPosition(x, y)) return false;
-    //     return lvlGrid[x, y] == FLOOR || lvlGrid[x, y] == CORRIDOR;
-    // }
-
     
     private void BuildDungeonMesh()
     {
@@ -524,13 +488,11 @@ public class LevelGenerator : MonoBehaviour
             dungeonParent = dungeonGO.transform;
         }
         
-        // Clear existing dungeon
         foreach (Transform child in dungeonParent)
         {
             DestroyImmediate(child.gameObject);
         }
         
-        // Build the dungeon
         for (int x = 0; x < lvlWidth; x++)
         {
             for (int y = 0; y < lvlHeight; y++)
@@ -563,7 +525,6 @@ public class LevelGenerator : MonoBehaviour
                         }
                         else if (floorPrefab != null)
                         {
-                            // Use floor prefab if no corridor prefab is specified
                             GameObject corridor = Instantiate(floorPrefab, position, Quaternion.identity, dungeonParent);
                             corridor.name = $"Corridor_{x}_{y}";
                         }
@@ -595,7 +556,6 @@ public class LevelGenerator : MonoBehaviour
     {
         lvlGrid = null;
     
-        // Initialize empty lists instead of setting to null or clearing
         if (rooms == null)
             rooms = new List<Room>();
         else
@@ -609,17 +569,16 @@ public class LevelGenerator : MonoBehaviour
         startRoom = null;
     }
     
-    // Debug visualization
     void OnDrawGizmos()
     {
         if (!showDebugInfo || rooms == null) return;
         
-        // Draw rooms
+        // rooms
         for (int i = 0; i < rooms.Count; i++)
         {
             Room room = rooms[i];
             
-            // Color based on room type
+            // colors based on the room type
             switch (room.roomType)
             {
                 case RoomType.Start:
@@ -634,14 +593,14 @@ public class LevelGenerator : MonoBehaviour
             Vector3 size = new Vector3(room.size.x, 0.1f, room.size.y);
             Gizmos.DrawCube(center, size);
             
-            // Draw room numbers
+            // show room numbs
             if (showRoomNumbers)
             {
                 UnityEditor.Handles.Label(center + Vector3.up, i.ToString());
             }
         }
         
-        // Draw corridors
+        // corridors
         if (corridors != null)
         {
             Gizmos.color = Color.yellow;

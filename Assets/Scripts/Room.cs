@@ -29,19 +29,16 @@ public class Room
         isMainPath = false;
     }
     
-    // Get the bounds of the room
     public RectInt GetBounds()
     {
         return new RectInt(position.x, position.y, size.x, size.y);
     }
     
-    // Get the center point of the room
     public Vector2Int GetCenter()
     {
         return new Vector2Int(position.x + size.x / 2, position.y + size.y / 2);
     }
     
-    // Check if this room overlaps with another room (with padding)
     public bool Overlaps(Room other, int padding = 1)
     {
         RectInt thisRect = new RectInt(position.x - padding, position.y - padding, 
