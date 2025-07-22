@@ -12,6 +12,7 @@ public class LevelGenerator : MonoBehaviour
     public Vector2Int minRoomSize = new Vector2Int(4, 4);
     public Vector2Int maxRoomSize = new Vector2Int(10, 10);
     public int maxAttempts = 100;
+    public int maxGenerationAttemps = 10;
     
     [Header("Organic Generation Settings")]
     public bool useOrganicGeneration = true;
@@ -41,6 +42,12 @@ public class LevelGenerator : MonoBehaviour
     private List<Room> rooms;
     private List<Corridor> corridors;
     private Room startRoom;
+
+    private List<Room> allRooms = new List<Room>();
+    private List<Corridor> allCorridors = new List<Corridor>();
+    private Dictionary<Vector2Int, GameObject> floorPool = new Dictionary<Vector2Int, GameObject>();
+    private Dictionary<Vector2Int, GameObject> wallPool = new Dictionary<Vector2Int, GameObject>();
+    private Dictionary<Vector2Int, GameObject> corridorPool = new Dictionary<Vector2Int, GameObject>();
     
     // grid cell types
     const int EMPTY = 0;
@@ -65,11 +72,11 @@ public class LevelGenerator : MonoBehaviour
         bool success = false;
         int attempts = 0;
         
-        while (!success && attempts < 10)
+        while (!success && attempts < maxGenerationAttemps)
         {
             attempts++;
             success = TryGenerateLevel();
-            
+
             if (!success)
             {
                 // tried with a diff seed here
@@ -77,49 +84,90 @@ public class LevelGenerator : MonoBehaviour
                     seed = Random.Range(0, 10000);
                 else
                     seed++;
-                    
+
                 Random.InitState(seed);
                 ClearGenerationData();
+
+                ReleaseRoomsAndCorridors();
             }
         }
         
         if (success)
         {
+            allRooms.AddRange(rooms);
+            allCorridors.AddRange(corridors);
+
             BuildDungeonMesh();
             if (showDebugInfo)
-                Debug.Log($"Dungeon generated successfully with {rooms.Count} rooms. Seed: {seed}");
+            {
+                Debug.Log($"Dungeon generated successfully with {rooms.Count} rooms. Seed: {seed}, Attempts: {attempts}");
+                LogMemoryUsage();
+            }
         }
         else
         {
             Debug.LogWarning("Failed to generate dungeon after multiple attempts!");
         }
     }
+
+    private void ReleaseRoomsAndCorridors()
+    {
+        if (rooms != null)
+        {
+            foreach (var room in rooms)
+            {
+                if (room != null)
+                {
+                    Room.Release(room);
+                }
+            }
+            rooms.Clear();
+        }
+
+        if (corridors != null)
+        {
+            foreach (var corridor in corridors)
+            {
+                if (corridor != null)
+                {
+                    Corridor.Release(corridor);
+                }
+            }
+            corridors.Clear();
+        }
+    }
     
+    private void LogMemoryUsage()
+    {
+        Debug.Log($"Object Pool Status - Rooms: {Room.PoolCount}, Corridors: {Corridor.PoolCount}");
+        Debug.Log($"Tile Pools - Floors: {floorPool.Count}, Walls: {wallPool.Count}, Corridors: {corridorPool.Count}");
+    }
+
     private void InitializeGenerator()
     {
         if (useRandomSeed)
             seed = Random.Range(0, 10000);
-        
+
         Random.InitState(seed);
-        
+
         lvlGrid = new int[lvlWidth, lvlHeight];
         rooms = new List<Room>();
         corridors = new List<Corridor>();
         startRoom = null;
+        
+        floorPool ??= new Dictionary<Vector2Int, GameObject>();
+        wallPool ??= new Dictionary<Vector2Int, GameObject>();
+        corridorPool ??= new Dictionary<Vector2Int, GameObject>();
+        allRooms ??= new List<Room>();
+        allCorridors ??= new List<Corridor>();
     }
     
     private bool TryGenerateLevel()
     {
-        if (rooms == null) rooms = new List<Room>();
-        if (corridors == null) corridors = new List<Corridor>();
-        
-        // generating rooms
         if (!GenerateRooms()) return false;
         
-        //connect rooms with corridors
         ConnectRooms();
         
-        //applying organic generation (if enabled)
         if (useOrganicGeneration)
         {
             ApplyPerlinNoise();
@@ -127,10 +175,7 @@ public class LevelGenerator : MonoBehaviour
             BlendOrganicWithStructured();
         }
         
-        //filling the grid
         FillGrid();
-        
-        //generating walls
         GenerateWalls();
         
         return true;
@@ -223,64 +268,64 @@ public class LevelGenerator : MonoBehaviour
     }
     
     private void BlendOrganicWithStructured()
-{
-    for (int i = 0; i < organicBlendIterations; i++)
     {
-        foreach (Room room in rooms)
+        for (int i = 0; i < organicBlendIterations; i++)
         {
-            RectInt bounds = room.GetExpandedBounds(1);
-            List<Vector2Int> newRoomTiles = new List<Vector2Int>();
-            
-            for (int x = bounds.xMin; x < bounds.xMax; x++)
+            foreach (Room room in rooms)
             {
-                for (int y = bounds.yMin; y < bounds.yMax; y++)
+                RectInt bounds = room.GetExpandedBounds(1);
+                List<Vector2Int> newRoomTiles = new List<Vector2Int>();
+                
+                for (int x = bounds.xMin; x < bounds.xMax; x++)
                 {
-                    if (IsValidPosition(x, y) && lvlGrid[x, y] == FLOOR)
+                    for (int y = bounds.yMin; y < bounds.yMax; y++)
                     {
-                        newRoomTiles.Add(new Vector2Int(x, y));
+                        if (IsValidPosition(x, y) && lvlGrid[x, y] == FLOOR)
+                        {
+                            newRoomTiles.Add(new Vector2Int(x, y));
+                        }
                     }
+                }
+                
+                foreach (Vector2Int tile in newRoomTiles)
+                {
+                    room.size = new Vector2Int(
+                        Mathf.Max(room.size.x, tile.x - room.position.x + 1),
+                        Mathf.Max(room.size.y, tile.y - room.position.y + 1)
+                    );
                 }
             }
             
-            foreach (Vector2Int tile in newRoomTiles)
+            foreach (Corridor corridor in corridors)
             {
-                room.size = new Vector2Int(
-                    Mathf.Max(room.size.x, tile.x - room.position.x + 1),
-                    Mathf.Max(room.size.y, tile.y - room.position.y + 1)
-                );
-            }
-        }
-        
-        foreach (Corridor corridor in corridors)
-        {
-            List<Vector2Int> originalPath = new List<Vector2Int>(corridor.path);
-            List<Vector2Int> newPathTiles = new List<Vector2Int>();
-            
-            foreach (Vector2Int point in originalPath)
-            {
-                for (int dx = -1; dx <= 1; dx++)
+                List<Vector2Int> originalPath = new List<Vector2Int>(corridor.path);
+                List<Vector2Int> newPathTiles = new List<Vector2Int>();
+                
+                foreach (Vector2Int point in originalPath)
                 {
-                    for (int dy = -1; dy <= 1; dy++)
+                    for (int dx = -1; dx <= 1; dx++)
                     {
-                        int x = point.x + dx;
-                        int y = point.y + dy;
-                        
-                        if (IsValidPosition(x, y) && lvlGrid[x, y] == FLOOR)
+                        for (int dy = -1; dy <= 1; dy++)
                         {
-                            Vector2Int newTile = new Vector2Int(x, y);
-                            if (!corridor.path.Contains(newTile) && !newPathTiles.Contains(newTile))
+                            int x = point.x + dx;
+                            int y = point.y + dy;
+                            
+                            if (IsValidPosition(x, y) && lvlGrid[x, y] == FLOOR)
                             {
-                                newPathTiles.Add(newTile);
+                                Vector2Int newTile = new Vector2Int(x, y);
+                                if (!corridor.path.Contains(newTile) && !newPathTiles.Contains(newTile))
+                                {
+                                    newPathTiles.Add(newTile);
+                                }
                             }
                         }
                     }
                 }
+                
+                corridor.path.AddRange(newPathTiles);
             }
-            
-            corridor.path.AddRange(newPathTiles);
         }
     }
-}
     
     private bool GenerateRooms()
     {
@@ -300,8 +345,8 @@ public class LevelGenerator : MonoBehaviour
                 Random.Range(2, lvlWidth - roomSize.x - 2),
                 Random.Range(2, lvlHeight - roomSize.y - 2)
             );
-            
-            Room newRoom = new Room(roomPosition, roomSize);
+
+            Room newRoom = Room.Get(roomPosition, roomSize);
             
             bool overlaps = false;
             foreach (Room existingRoom in rooms)
@@ -309,6 +354,7 @@ public class LevelGenerator : MonoBehaviour
                 if (newRoom.Overlaps(existingRoom, 2))
                 {
                     overlaps = true;
+                    Room.Release(newRoom);
                     break;
                 }
             }
@@ -362,7 +408,7 @@ public class LevelGenerator : MonoBehaviour
             
             if (closestConnected != null && closestUnconnected != null)
             {
-                corridors.Add(new Corridor(closestConnected, closestUnconnected));
+                corridors.Add(Corridor.Get(closestConnected, closestUnconnected));
                 connectedRooms.Add(closestUnconnected);
                 unconnectedRooms.Remove(closestUnconnected);
             }
@@ -372,26 +418,28 @@ public class LevelGenerator : MonoBehaviour
         {
             for (int j = i + 1; j < rooms.Count; j++)
             {
-                if (Random.Range(0f, 1f) < 0.2f)
+                if (Random.Range(0f, 1f) < 0.2f) // 20% chances for extra connec
                 {
-                    bool alreadyConnected = false;
-                    foreach (Corridor corridor in corridors)
+                    if (!AreRoomsConnected(rooms[i], rooms[j]))
                     {
-                        if ((corridor.roomA == rooms[i] && corridor.roomB == rooms[j]) ||
-                            (corridor.roomA == rooms[j] && corridor.roomB == rooms[i]))
-                        {
-                            alreadyConnected = true;
-                            break;
-                        }
-                    }
-                    
-                    if (!alreadyConnected)
-                    {
-                        corridors.Add(new Corridor(rooms[i], rooms[j]));
+                        corridors.Add(Corridor.Get(rooms[i], rooms[j]));
                     }
                 }
             }
         }
+    }
+    
+    private bool AreRoomsConnected(Room a, Room b)
+    {
+        foreach (Corridor corridor in corridors)
+        {
+            if ((corridor.roomA == a && corridor.roomB == b) ||
+                (corridor.roomA == b && corridor.roomB == a))
+            {
+                return true;
+            }
+        }
+        return false;
     }
     
     private void FillGrid()
@@ -400,7 +448,7 @@ public class LevelGenerator : MonoBehaviour
         {
             lvlGrid = new int[lvlWidth, lvlHeight];
         }
-        
+
         if (!useOrganicGeneration)
         {
             for (int x = 0; x < lvlWidth; x++)
@@ -411,43 +459,31 @@ public class LevelGenerator : MonoBehaviour
                 }
             }
         }
-        
-        if (rooms != null)
+
+        foreach (Room room in rooms)
         {
-            foreach (Room room in rooms)
+            RectInt bounds = room.GetBounds();
+            for (int x = bounds.xMin; x < bounds.xMax; x++)
             {
-                if (room != null)
+                for (int y = bounds.yMin; y < bounds.yMax; y++)
                 {
-                    RectInt bounds = room.GetBounds();
-                    for (int x = bounds.xMin; x < bounds.xMax; x++)
+                    if (IsValidPosition(x, y))
                     {
-                        for (int y = bounds.yMin; y < bounds.yMax; y++)
-                        {
-                            if (IsValidPosition(x, y))
-                            {
-                                lvlGrid[x, y] = FLOOR;
-                            }
-                        }
+                        lvlGrid[x, y] = FLOOR;
                     }
                 }
             }
         }
-        
-        if (corridors != null)
+
+        foreach (Corridor corridor in corridors)
         {
-            foreach (Corridor corridor in corridors)
+            foreach (Vector2Int point in corridor.path)
             {
-                if (corridor != null && corridor.path != null)
+                if (IsValidPosition(point.x, point.y))
                 {
-                    foreach (Vector2Int point in corridor.path)
+                    if (lvlGrid[point.x, point.y] == EMPTY)
                     {
-                        if (IsValidPosition(point.x, point.y))
-                        {
-                            if (lvlGrid[point.x, point.y] == EMPTY)
-                            {
-                                lvlGrid[point.x, point.y] = CORRIDOR;
-                            }
-                        }
+                        lvlGrid[point.x, point.y] = CORRIDOR;
                     }
                 }
             }
@@ -462,21 +498,25 @@ public class LevelGenerator : MonoBehaviour
             {
                 if (lvlGrid[x, y] == FLOOR || lvlGrid[x, y] == CORRIDOR)
                 {
-                    for (int dx = -1; dx <= 1; dx++)
-                    {
-                        for (int dy = -1; dy <= 1; dy++)
-                        {
-                            int nx = x + dx;
-                            int ny = y + dy;
-
-                            if (IsValidPosition(nx, ny) && lvlGrid[nx, ny] == EMPTY)
-                            {
-                                lvlGrid[nx, ny] = WALL;
-                            }
-                        }
-                    }
+                    CheckAndMarkWall(x-1, y);
+                    CheckAndMarkWall(x+1, y);
+                    CheckAndMarkWall(x, y-1);
+                    CheckAndMarkWall(x, y+1);
+                    
+                    CheckAndMarkWall(x-1, y-1);
+                    CheckAndMarkWall(x-1, y+1);
+                    CheckAndMarkWall(x+1, y-1);
+                    CheckAndMarkWall(x+1, y+1);
                 }
             }
+        }
+    }
+    
+    private void CheckAndMarkWall(int x, int y)
+    {
+        if (IsValidPosition(x, y) && lvlGrid[x, y] == EMPTY)
+        {
+            lvlGrid[x, y] = WALL;
         }
     }
     
@@ -487,86 +527,141 @@ public class LevelGenerator : MonoBehaviour
             GameObject dungeonGO = new GameObject("Generated Dungeon");
             dungeonParent = dungeonGO.transform;
         }
-        
+
+        Dictionary<Vector2Int, GameObject> newFloorPool = new Dictionary<Vector2Int, GameObject>();
+        Dictionary<Vector2Int, GameObject> newWallPool = new Dictionary<Vector2Int, GameObject>();
+        Dictionary<Vector2Int, GameObject> newCorridorPool = new Dictionary<Vector2Int, GameObject>();
+
         foreach (Transform child in dungeonParent)
         {
             DestroyImmediate(child.gameObject);
         }
-        
+
         for (int x = 0; x < lvlWidth; x++)
         {
             for (int y = 0; y < lvlHeight; y++)
             {
-                Vector3 position = new Vector3(x, 0, y);
+                Vector2Int pos = new Vector2Int(x, y);
+                Vector3 worldPos = new Vector3(x, 0, y);
                 
                 switch (lvlGrid[x, y])
                 {
                     case FLOOR:
-                        if (floorPrefab != null)
-                        {
-                            GameObject floor = Instantiate(floorPrefab, position, Quaternion.identity, dungeonParent);
-                            floor.name = $"Floor_{x}_{y}";
-                        }
+                        HandleTile(pos, worldPos, floorPrefab, floorPool, newFloorPool, "Floor");
                         break;
                         
                     case WALL:
-                        if (wallPrefab != null)
-                        {
-                            GameObject wall = Instantiate(wallPrefab, position, Quaternion.identity, dungeonParent);
-                            wall.name = $"Wall_{x}_{y}";
-                        }
+                        HandleTile(pos, worldPos, wallPrefab, wallPool, newWallPool, "Wall");
                         break;
                         
                     case CORRIDOR:
-                        if (corridorPrefab != null)
-                        {
-                            GameObject corridor = Instantiate(corridorPrefab, position, Quaternion.identity, dungeonParent);
-                            corridor.name = $"Corridor_{x}_{y}";
-                        }
-                        else if (floorPrefab != null)
-                        {
-                            GameObject corridor = Instantiate(floorPrefab, position, Quaternion.identity, dungeonParent);
-                            corridor.name = $"Corridor_{x}_{y}";
-                        }
+                        HandleTile(pos, worldPos, corridorPrefab ?? floorPrefab, corridorPool, newCorridorPool, "Corridor");
                         break;
                 }
             }
         }
+        
+        // Destroy unused tiles
+        CleanupUnusedTiles(floorPool, newFloorPool);
+        CleanupUnusedTiles(wallPool, newWallPool);
+        CleanupUnusedTiles(corridorPool, newCorridorPool);
+        
+        // Update pools
+        floorPool = newFloorPool;
+        wallPool = newWallPool;
+        corridorPool = newCorridorPool;
     }
-    
-    private bool IsValidPosition(int x, int y)
+
+    private void HandleTile(Vector2Int pos, Vector3 worldPos, GameObject prefab, 
+                          Dictionary<Vector2Int, GameObject> oldPool,
+                          Dictionary<Vector2Int, GameObject> newPool, string namePrefix)
     {
-        return x >= 0 && x < lvlWidth && y >= 0 && y < lvlHeight;
+        if (prefab == null) return;
+        
+        if (oldPool.TryGetValue(pos, out GameObject existingTile))
+        {
+            existingTile.transform.position = worldPos;
+            existingTile.SetActive(true);
+            newPool.Add(pos, existingTile);
+            oldPool.Remove(pos);
+        }
+        else
+        {
+            GameObject tile = Instantiate(prefab, worldPos, Quaternion.identity, dungeonParent);
+            tile.name = $"{namePrefix}_{pos.x}_{pos.y}";
+            newPool.Add(pos, tile);
+        }
     }
-    
+
+    private void CleanupUnusedTiles(Dictionary<Vector2Int, GameObject> oldPool, 
+                                  Dictionary<Vector2Int, GameObject> newPool)
+    {
+        foreach (var kvp in oldPool)
+        {
+            if (kvp.Value != null)
+            {
+                Destroy(kvp.Value);
+            }
+        }
+        oldPool.Clear();
+    }
+
     private void ClearDungeon()
     {
         if (dungeonParent != null)
         {
             foreach (Transform child in dungeonParent)
             {
-                DestroyImmediate(child.gameObject);
+                if (child != null)
+                {
+                    DestroyImmediate(child.gameObject);
+                }
             }
         }
+
+        ReleaseRoomsAndCorridors();
         
-        ClearGenerationData();
+        if (allRooms != null)
+        {
+            allRooms.Clear();
+        }
+        
+        if (allCorridors != null)
+        {
+            allCorridors.Clear();
+        }
+        
+        ClearTilePool(floorPool);
+        ClearTilePool(wallPool);
+        ClearTilePool(corridorPool);
+    }
+    
+    private void ClearTilePool(Dictionary<Vector2Int, GameObject> pool)
+    {
+        if (pool != null)
+        {
+            foreach (var tile in pool.Values)
+            {
+                if (tile != null)
+                {
+                    DestroyImmediate(tile);
+                }
+            }
+            pool.Clear();
+        }
     }
     
     private void ClearGenerationData()
     {
         lvlGrid = null;
-    
-        if (rooms == null)
-            rooms = new List<Room>();
-        else
-            rooms.Clear();
-            
-        if (corridors == null)
-            corridors = new List<Corridor>();
-        else
-            corridors.Clear();
-            
+        rooms?.Clear();
+        corridors?.Clear();
         startRoom = null;
+    }
+
+    private bool IsValidPosition(int x, int y)
+    {
+        return x >= 0 && x < lvlWidth && y >= 0 && y < lvlHeight;
     }
     
     void OnDrawGizmos()

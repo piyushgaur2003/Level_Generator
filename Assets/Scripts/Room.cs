@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 public static class RoomExtensions
@@ -16,19 +17,49 @@ public static class RoomExtensions
 [System.Serializable]
 public class Room
 {
+    private static Stack<Room> pool = new Stack<Room>();
+
     public Vector2Int position;
     public Vector2Int size;
     public RoomType roomType;
     public bool isMainPath;
     
-    public Room(Vector2Int pos, Vector2Int roomSize, RoomType type = RoomType.Normal)
+    public static int PoolCount => pool.Count;
+
+    private Room() { }
+
+    public static Room Get(Vector2Int pos, Vector2Int roomSize, RoomType type = RoomType.Normal)
     {
-        position = pos;
-        size = roomSize;
-        roomType = type;
-        isMainPath = false;
+        Room room;
+        if (pool.Count > 0)
+        {
+            room = pool.Pop();
+        }
+        else
+        {
+            room = new Room();
+        }
+
+        room.position = pos;
+        room.size = roomSize;
+        room.roomType = type;
+        room.isMainPath = false;
+
+        return room;
     }
+
+    public static void Release(Room room)
+    {
+        if (room == null) return;
     
+        room.position = Vector2Int.zero;
+        room.size = Vector2Int.zero;
+        room.roomType = RoomType.Normal;
+        room.isMainPath = false;
+        
+        pool.Push(room);
+    }
+
     public RectInt GetBounds()
     {
         return new RectInt(position.x, position.y, size.x, size.y);

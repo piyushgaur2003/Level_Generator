@@ -4,30 +4,59 @@ using System.Collections.Generic;
 [System.Serializable]
 public class Corridor
 {
+    private static Stack<Corridor> pool = new Stack<Corridor>();
+
     public List<Vector2Int> path;
     public Room roomA;
     public Room roomB;
-    
-    public Corridor(Room a, Room b)
+
+    public static int PoolCount => pool.Count;
+
+    private Corridor()
     {
-        roomA = a;
-        roomB = b;
         path = new List<Vector2Int>();
-        GeneratePath();
     }
+
+    public static Corridor Get(Room a, Room b)
+    {
+        Corridor corridor;
+        if (pool.Count > 0)
+        {
+            corridor = pool.Pop();
+        }
+        else
+        {
+            corridor = new Corridor();
+        }
+
+        corridor.roomA = a;
+        corridor.roomB = b;
+        corridor.GeneratePath();
+        return corridor;
+    }
+
+    public static void Release(Corridor corridor)
+    {
+        if (corridor == null) return;
     
+        corridor.path.Clear();
+        corridor.roomA = null;
+        corridor.roomB = null;
+        pool.Push(corridor);
+    }
+
     private void GeneratePath()
     {
         Vector2Int startPoint = GetClosestPointOnRoom(roomA, roomB.GetCenter());
         Vector2Int endPoint = GetClosestPointOnRoom(roomB, roomA.GetCenter());
-        
+
         path.Clear();
-        
+
         Vector2Int current = startPoint;
         path.Add(current);
-        
+
         bool horizontalFirst = Random.Range(0, 2) == 0;
-        
+
         if (horizontalFirst)
         {
             while (current.x != endPoint.x)
@@ -35,7 +64,7 @@ public class Corridor
                 current.x += current.x < endPoint.x ? 1 : -1;
                 path.Add(current);
             }
-            
+
             while (current.y != endPoint.y)
             {
                 current.y += current.y < endPoint.y ? 1 : -1;
@@ -49,7 +78,7 @@ public class Corridor
                 current.y += current.y < endPoint.y ? 1 : -1;
                 path.Add(current);
             }
-            
+
             while (current.x != endPoint.x)
             {
                 current.x += current.x < endPoint.x ? 1 : -1;

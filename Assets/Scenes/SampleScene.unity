@@ -148,13 +148,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3e25e0127a5c9424c96d9aaa9230f422, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  lvlWidth: 80
-  lvlHeight: 80
-  minRooms: 12
-  maxRooms: 20
+  lvlWidth: 30
+  lvlHeight: 30
+  minRooms: 5
+  maxRooms: 8
   minRoomSize: {x: 4, y: 4}
   maxRoomSize: {x: 10, y: 10}
   maxAttempts: 100
+  maxGenerationAttemps: 10
   useOrganicGeneration: 1
   noiseThreshold: 0.5
   noiseScale: 0.1
@@ -162,7 +163,7 @@ MonoBehaviour:
   randomWalkTurnChance: 0.3
   organicBlendIterations: 3
   generateOnStart: 1
-  seed: 4626
+  seed: 471
   useRandomSeed: 1
   floorPrefab: {fileID: 5723290600562596945, guid: 8a745338fc37f4eed83b685a1672680b, type: 3}
   wallPrefab: {fileID: 8498225798459455531, guid: e435fbcab18df4fd493b527a7ab5a1fa, type: 3}
